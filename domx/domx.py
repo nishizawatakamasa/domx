@@ -272,7 +272,7 @@ class WrappedElement(_PageScoped):
     @property
     def src(self) -> str | None:
         return self._resolved_url_from_attr('src')
-    
+
     def scroll_into_view(self) -> None:
         if self._elem is None:
             logger.warning('[scroll_into_view] element is None')
@@ -285,16 +285,67 @@ class WrappedElement(_PageScoped):
         except Exception as e:
             logger.warning(f'[scroll_into_view] {type(e).__name__}: {e} | url={self._page.url!r}')
 
+    @staticmethod
+    def _isolate_visibility_css(scope: str, attr: str) -> str:
+        return (
+            f'{scope} * {{\n'
+            f'  visibility: hidden !important;\n'
+            f'}}\n'
+            f'[{attr}],\n'
+            f'[{attr}] * {{\n'
+            f'  visibility: visible !important;\n'
+            f'}}\n'
+        )
+
+    def _isolate_apply(self, attr: str, css: str, style_id: str) -> None:
+        self._elem.evaluate(
+            '''(el, args) => {
+                const [attr, css, styleId] = args;
+                el.setAttribute(attr, '');
+                const s = document.createElement('style');
+                s.id = styleId;
+                s.textContent = css;
+                (document.head || document.documentElement).appendChild(s);
+            }''',
+            [attr, css, style_id],
+        )
+
+    def _isolate_remove(self, attr: str, style_id: str) -> None:
+        try:
+            self._elem.evaluate(
+                '''(el, args) => {
+                    const [attr, styleId] = args;
+                    el.removeAttribute(attr);
+                    const node = document.getElementById(styleId);
+                    if (node) node.remove();
+                }''',
+                [attr, style_id],
+            )
+        except Exception as e:
+            logger.warning(
+                f'[screenshot isolate cleanup] {type(e).__name__}: {e} | url={self._page.url!r}'
+            )
+
     def screenshot(
         self,
         path: Path,
         image_type: Literal['png', 'jpeg'] = 'png',
+        *,
+        isolate: bool = False,
+        isolate_scope: str = 'body',
+        isolate_attr: str = 'data-domx-screenshot-root',
+        isolate_style_id: str = 'domx-screenshot-isolate',
     ) -> bool:
         if self._elem is None:
             logger.warning('[screenshot] element is None')
             return False
+        if isolate:
+            style_id = f'{isolate_style_id}-{time.time_ns()}'
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
+            if isolate:
+                css = self._isolate_visibility_css(isolate_scope, isolate_attr)
+                self._isolate_apply(isolate_attr, css, style_id)
             self._elem.screenshot(
                 path=path,
                 type=image_type,
@@ -304,6 +355,9 @@ class WrappedElement(_PageScoped):
         except Exception as e:
             logger.warning(f'[screenshot] {type(e).__name__}: {e} | url={self._page.url!r}')
             return False
+        finally:
+            if isolate:
+                self._isolate_remove(isolate_attr, style_id)
 
 
 class WrappedElementGroup(_PageScoped):
