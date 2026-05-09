@@ -3,7 +3,7 @@ import hashlib
 import os
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Iterator
 
 from loguru import logger
 from selectolax.lexbor import LexborHTMLParser
@@ -160,3 +160,10 @@ def glob_paths(dir_path: Path, pattern: str = '*.html') -> list[str]:
     ``str`` にしているのは ``pool_map`` 等のプロセスプールへ渡すとき pickle しやすくするため。
     '''
     return [str(p) for p in dir_path.glob(pattern)]
+
+
+def counter(start: int = 1) -> Iterator[int]:
+    n = start
+    while True:
+        yield n
+        n += 1
