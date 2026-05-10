@@ -107,33 +107,32 @@ with patchright_page() as page:
             '情報更新日': dd_text(r'情報更新日'),
         })
         
-        page.add_style_tag(content='header, footer.site-footer { visibility: hidden !important; }')
-        
         p.ss('h4').re.s(r'概要').next('div:has(dl)').screenshot(path=here(f'media/{i}-summary.png'))
 
         elem_iframe = p.s('iframe[src^="https://example.com"]')
         elem_iframe.scroll_into_view()
         time.sleep(3)
         elem_iframe.screenshot(path=here(f'media/{i}-iframe.png'))
-        
+
         main_img_url = p.s('img.w-full.object-contain').src
-        
+        if (body := p.bytes_at(main_img_url)):
+            write_bytes(here(f'media/{i}-main-img.jpg'), body)
+
         img_desc_grep = p.ss('p.text-left').re.s(r'画像をクリック').next('ul').ss('li p').re
         img_desc = img_desc_grep.s(r'表紙') or img_desc_grep.s(r'^(?!.*裏面).*')
         img_url = img_desc.parent('li').s('a').url
-        
-        if main_img_url and (res := p.goto(main_img_url)) and res.ok:
-            write_bytes(here(f'media/{i}-main-img.jpg'), res.body())
-        if img_url and (res := p.goto(img_url)) and res.ok:
-            write_bytes(here(f'media/{i}-img-desc.jpg'), res.body())
+        if (body := p.bytes_at(img_url)):
+            write_bytes(here(f'media/{i}-img-desc.jpg'), body)
 ```
 
 ### スクレイピング(HTML丸ごと保存)
 
 ```python
+from datetime import datetime, timezone
+
 from domx import wrap_page
 from domx.browser import camoufox_page
-from domx.utils import append_csv, from_here, hash_name, save_log, write_text
+from domx.utils import append_csv, from_here, hash_name, meta_html, save_log, write_text
 
 here = from_here(__file__)
 save_log(here('log/scraping.log'))
@@ -150,7 +149,11 @@ with camoufox_page() as page:
             append_csv(here('csv/failed.csv'), {'url': url, 'reason': 'goto'})
             continue
         file_name = f'{hash_name(url)}.html'
-        if not write_text(here('html') / file_name, p.html(with_url=True, with_saved_at=True)):
+        html = meta_html({
+            'domx:url': page.url,
+            'domx:saved_at': datetime.now(timezone.utc).isoformat(),
+        }) + page.content()
+        if not write_text(here('html') / file_name, html):
             append_csv(here('csv/failed.csv'), {'url': url, 'reason': 'write_text'})
             continue
 ```
@@ -172,8 +175,9 @@ for i, file_path in enumerate(here('html').glob('*.html'),1):
     p = wrap_parser(parser)
     dts = p.ss('dt').re
     results.append({
-        'URL': p.url,
-        'file_name': file_path.name,
+        'ページURL': p.s('meta[name="domx:url"]').attr('content'),
+        '保存日時': p.s('meta[name="domx:saved_at"]').attr('content'),
+        'ファイル名': file_path.name,
         '教室名': p.s('h1 .text02').text,
         '住所': p.s('.item .mapText').text,
         '所在地': dts.s(r'所在地').next('dd').text,
@@ -203,8 +207,9 @@ def extract(file_path: str) -> dict | None:
     p = wrap_parser(parser)
     dts = p.ss('dt').re
     return {
-        'URL': p.url,
-        'file_path': file_path,
+        'ページURL': p.s('meta[name="domx:url"]').attr('content'),
+        '保存日時': p.s('meta[name="domx:saved_at"]').attr('content'),
+        'ファイルパス': file_path,
         '教室名': p.s('h1 .text02').text,
         '住所': p.s('.item .mapText').text,
         '所在地': dts.s(r'所在地').next('dd').text,

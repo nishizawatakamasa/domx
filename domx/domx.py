@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import html
 from collections.abc import Iterator
 import random
 import re
 import time
 import unicodedata as ud
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urljoin
@@ -21,9 +19,6 @@ Page = PatchPage | PlayPage
 ElementHandle = PatchElementHandle | PlayElementHandle
 Response = PatchResponse | PlayResponse
 Frame = PatchFrame | PlayFrame
-
-_DOMX_META_URL = 'domx:url'
-_DOMX_META_SAVED_AT = 'domx:saved_at'
 
 _UNUSABLE_INLINE_URL = re.compile(r'(?i)^(?:#|javascript:|mailto:|tel:|data:)')
 
@@ -97,7 +92,7 @@ class WrappedFrame(_PageScoped):
             return self.wrap_element(elem)
         except Exception as e:
             logger.warning(
-                f'[wait] {type(e).__name__}: {e} | selector={selector!r} | url={self._page.url}'
+                f'[wait] {type(e).__name__}: {e} | selector={selector!r} | url={self._page.url!r}'
             )
             return self.wrap_element(None)
 
@@ -148,31 +143,39 @@ class WrappedPage(_PageScoped):
                 reason = 'response is None'
             except Exception as e:
                 reason = f'{type(e).__name__}: {e}'
-            logger.warning(f'[goto] {url} ({i+1}/{try_cnt}) {reason}')
+            logger.warning(f'[goto] {url!r} ({i+1}/{try_cnt}) {reason}')
             if i + 1 < try_cnt:
                 time.sleep(random.uniform(*wait_range))
-        logger.error(f'[goto] giving up: {url}')
+        logger.error(f'[goto] giving up: {url!r}')
         return None
+    
+    def bytes_at(self, url: str | None) -> bytes | None:
+        if not url:
+            return None
+        new_page = self._page.context.new_page()
+        try:
+            res = wrap_page(new_page).goto(url)
+            if not res:
+                return None
+            if res.ok:
+                return res.body()
+            logger.warning(
+                f'[bytes_at] HTTP {res.status} {res.status_text!r} | url={url!r} | response_url={res.url!r}'
+            )
+            return None
+        except Exception as e:
+            logger.warning(f'[bytes_at] {type(e).__name__}: {e} | url={url!r}')
+            return None
+        finally:
+            new_page.close()
 
     def wait(self, selector: str, state: str = 'attached', timeout: int = 15000) -> WrappedElement:
         try:
             elem = self._page.wait_for_selector(selector, state=state, timeout=timeout)
             return self.wrap_element(elem)
         except Exception as e:
-            logger.warning(f'[wait] {type(e).__name__}: {e} | selector={selector!r} | url={self._page.url}')
+            logger.warning(f'[wait] {type(e).__name__}: {e} | selector={selector!r} | url={self._page.url!r}')
             return self.wrap_element(None)
-
-    def html(self, with_url: bool = False, with_saved_at: bool = False) -> str:
-        content = self._page.content()
-        metas: list[str] = []
-        if with_url:
-            metas.append(
-                f'<meta name="{_DOMX_META_URL}" content="{html.escape(self._page.url)}">'
-            )
-        if with_saved_at:
-            ts = datetime.now(timezone.utc).isoformat()
-            metas.append(f'<meta name="{_DOMX_META_SAVED_AT}" content="{ts}">')
-        return ''.join(metas) + content
 
 
 class WrappedElement(_PageScoped):
@@ -443,20 +446,6 @@ class WrappedParser:
     def ss(self, selector: str) -> WrappedNodeGroup:
         nodes = self._parser.css(selector)
         return wrap_node_group([wrap_node(n) for n in nodes])
-
-    @property
-    def url(self) -> str | None:
-        node = self._parser.css_first(f'meta[name="{_DOMX_META_URL}"]')
-        if node is None:
-            return None
-        return node.attributes.get('content') or None
-
-    @property
-    def saved_at(self) -> str | None:
-        node = self._parser.css_first(f'meta[name="{_DOMX_META_SAVED_AT}"]')
-        if node is None:
-            return None
-        return node.attributes.get('content') or None
 
 
 class WrappedNode:

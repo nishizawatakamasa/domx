@@ -1,6 +1,8 @@
 import csv
 import hashlib
+import html
 import os
+from collections.abc import Mapping
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Callable, Iterable, Iterator
@@ -20,6 +22,14 @@ def parse_html(path: Path) -> LexborHTMLParser | None:
     except Exception as e:
         logger.error(f'[parse_html] {path} {type(e).__name__}: {e}')
         return None
+
+
+def meta_html(meta: Mapping[str, str]) -> str:
+    return ''.join(
+        f'<meta name="{html.escape(name)}" content="{html.escape(content)}">'
+        for name, content in meta.items()
+    )
+
 
 def from_here(file: str) -> Callable[[str], Path]:
     base = Path(file).resolve().parent
