@@ -150,7 +150,8 @@ with camoufox_page() as page:
             continue
         file_name = f'{hash_name(url)}.html'
         html = meta_html({
-            'domx:url': page.url,
+            'domx:id': str(i),
+            'domx:url': url,
             'domx:saved_at': datetime.now(timezone.utc).isoformat(),
         }) + page.content()
         if not write_text(here('html') / file_name, html):
