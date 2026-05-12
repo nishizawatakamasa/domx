@@ -150,9 +150,10 @@ with camoufox_page() as page:
             continue
         file_name = f'{hash_name(url)}.html'
         html = meta_html({
-            'domx:id': str(i),
-            'domx:url': url,
-            'domx:saved_at': datetime.now(timezone.utc).isoformat(),
+            'domx:id': i,
+            'domx:request_url': url,
+            'domx:final_url': page.url,
+            'domx:saved_at': datetime.now(timezone.utc),
         }) + page.content()
         if not write_text(here('html') / file_name, html):
             append_csv(here('csv/failed.csv'), {'url': url, 'reason': 'write_text'})

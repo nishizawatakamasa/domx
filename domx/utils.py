@@ -24,9 +24,9 @@ def parse_html(path: Path) -> LexborHTMLParser | None:
         return None
 
 
-def meta_html(meta: Mapping[str, str | None]) -> str:
+def meta_html(meta: Mapping[str, object | None]) -> str:
     return ''.join(
-        f'<meta name="{html.escape(name)}" content="{html.escape(content)}">'
+        f'<meta name="{html.escape(name)}" content="{html.escape(str(content))}">'
         for name, content in meta.items()
         if content is not None
     )
