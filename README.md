@@ -24,7 +24,7 @@ with patchright_page() as page:
     p = wrap_page(page)
 
     p.goto('https://www.foobarbaz1.jp')
-    pref_urls = p.ss('li.item > ul > li > a').urls
+    pref_urls = p.ii('li.item > ul > li > a').urls
 
     classroom_urls = []
     for i, url in enumerate(pref_urls, 1):
@@ -32,26 +32,26 @@ with patchright_page() as page:
         if not p.goto(url):
             append_csv(here('csv/failed.csv'), {'url': url, 'reason': 'goto'})
             continue
-        classroom_urls.extend(p.ss('.school-area h4 a').urls)
+        classroom_urls.extend(p.ii('.school-area h4 a').urls)
 
     for i, url in enumerate(classroom_urls, 1):
         print(f'classroom_urls {i}/{len(classroom_urls)}')
         if not p.goto(url):
             append_csv(here('csv/failed.csv'), {'url': url, 'reason': 'goto'})
             continue
-        th_grep = p.ss('th').re
+        th_scan = p.ii('th').scan
         append_csv(here('csv/scrape.csv'), {
             'id': i,
             'URL': page.url,
-            '教室名': p.s('h1 .text01').text,
-            '住所': p.s('.item .mapText').text,
-            '電話番号': p.s('.item .phoneNumber').text,
-            'HP': th_grep.s(r'ホームページ').next('td').s('a').url,
-            '営業時間': th_grep.s(r'営業時間').next('td').text,
-            '定休日': th_grep.s(r'定休日').next('td').text,
+            '教室名': p.i('h1 .text01').text,
+            '住所': p.i('.item .mapText').text,
+            '電話番号': p.i('.item .phoneNumber').text,
+            'HP': th_scan.m(r'ホームページ').n('td').i('a').url,
+            '営業時間': th_scan.m(r'営業時間').n('td').text,
+            '定休日': th_scan.m(r'定休日').n('td').text,
         })
-        p.s('.school-map').screenshot(here(f'media/{i}-screenshot.png'))
-        if (img_url := p.s('.school-area img').src):
+        p.i('.school-map').screenshot(here(f'media/{i}-screenshot.png'))
+        if (img_url := p.i('.school-area img').src):
             if (res := p.goto(img_url)) and res.ok:
                 write_bytes(here(f'media/{i}-img.jpg'), res.body())
 ```
@@ -73,7 +73,7 @@ with patchright_page() as page:
     p = wrap_page(page)
     
     p.goto('https://example.com/demo/search')
-    prefecture_urls = p.ss('li > a[href^="https://example.com/demo/search/area/"]').urls
+    prefecture_urls = p.ii('li > a[href^="https://example.com/demo/search/area/"]').urls
 
     bukken_urls = []
     for i, prefecture_url in enumerate(prefecture_urls, 1):
@@ -82,7 +82,7 @@ with patchright_page() as page:
         while True:
             if not p.goto(f'{prefecture_url}?{urlencode({"page": page_num})}'):
                 break
-            if not (bukken_elems := p.ss('ul li div a[href^="https://example.com"]:has(p)')):
+            if not (bukken_elems := p.ii('ul li div a[href^="https://example.com"]:has(p)')):
                 break
             bukken_urls.extend(bukken_elems.urls)
             page_num += 1
@@ -93,8 +93,8 @@ with patchright_page() as page:
             append_csv(here('csv/failed.csv'), {'url': url, 'reason': 'goto'})
             continue
         
-        dt_grep = p.ss('h4').re.s(r'概要').next('div:has(dl)').ss('dt').re
-        dd_text = lambda pattern: dt_grep.s(pattern).next('dd').text
+        dt_scan = p.ii('h4').scan.m(r'概要').n('div:has(dl)').ii('dt').scan
+        dd_text = lambda pattern: dt_scan.m(pattern).n('dd').text
 
         append_csv(here('csv/scrape.csv'), {
             'id': i,
@@ -107,20 +107,20 @@ with patchright_page() as page:
             '情報更新日': dd_text(r'情報更新日'),
         })
         
-        p.ss('h4').re.s(r'概要').next('div:has(dl)').screenshot(path=here(f'media/{i}-summary.png'))
+        p.ii('h4').scan.m(r'概要').n('div:has(dl)').screenshot(path=here(f'media/{i}-summary.png'))
 
-        elem_iframe = p.s('iframe[src^="https://example.com"]')
+        elem_iframe = p.i('iframe[src^="https://example.com"]')
         elem_iframe.scroll_into_view()
         time.sleep(3)
         elem_iframe.screenshot(path=here(f'media/{i}-iframe.png'))
 
-        main_img_url = p.s('img.w-full.object-contain').src
+        main_img_url = p.i('img.w-full.object-contain').src
         if (body := p.bytes_at(main_img_url)):
             write_bytes(here(f'media/{i}-main-img.jpg'), body)
 
-        img_desc_grep = p.ss('p.text-left').re.s(r'画像をクリック').next('ul').ss('li p').re
-        img_desc = img_desc_grep.s(r'表紙') or img_desc_grep.s(r'^(?!.*裏面).*')
-        img_url = img_desc.parent('li').s('a').url
+        img_desc_scan = p.ii('p.text-left').scan.m(r'画像をクリック').n('ul').ii('li p').scan
+        img_desc = img_desc_scan.m(r'表紙') or img_desc_scan.m(r'^(?!.*裏面).*')
+        img_url = img_desc.o('li').i('a').url
         if (body := p.bytes_at(img_url)):
             write_bytes(here(f'media/{i}-img-desc.jpg'), body)
 ```
@@ -141,7 +141,7 @@ with camoufox_page() as page:
     p = wrap_page(page)
 
     p.goto('https://www.foobarbaz1.jp')
-    item_urls = p.ss('ul.items > li > a').urls
+    item_urls = p.ii('ul.items > li > a').urls
 
     for i, url in enumerate(item_urls, 1):
         print(f'item_urls {i}/{len(item_urls)}')
@@ -151,8 +151,7 @@ with camoufox_page() as page:
         file_name = f'{hash_name(url)}.html'
         html = meta_html({
             'domx:id': i,
-            'domx:request_url': url,
-            'domx:final_url': page.url,
+            'domx:url': page.url,
             'domx:saved_at': datetime.now(timezone.utc),
         }) + page.content()
         if not write_text(here('html') / file_name, html):
@@ -175,16 +174,16 @@ for i, file_path in enumerate(here('html').glob('*.html'),1):
     if not (parser := parse_html(file_path)):
         continue
     p = wrap_parser(parser)
-    dts = p.ss('dt').re
+    dt_scan = p.ii('dt').scan
     results.append({
-        'ページURL': p.s('meta[name="domx:url"]').attr('content'),
-        '保存日時': p.s('meta[name="domx:saved_at"]').attr('content'),
+        'ページURL': p.i('meta[name="domx:url"]').attr('content'),
+        '保存日時': p.i('meta[name="domx:saved_at"]').attr('content'),
         'ファイル名': file_path.name,
-        '教室名': p.s('h1 .text02').text,
-        '住所': p.s('.item .mapText').text,
-        '所在地': dts.s(r'所在地').next('dd').text,
-        '交通': dts.s(r'交通').next('dd').text,
-        '物件番号': dts.s(r'物件番号').next('dd').text,
+        '教室名': p.i('h1 .text02').text,
+        '住所': p.i('.item .mapText').text,
+        '所在地': dt_scan.m(r'所在地').n('dd').text,
+        '交通': dt_scan.m(r'交通').n('dd').text,
+        '物件番号': dt_scan.m(r'物件番号').n('dd').text,
     })
 write_parquet(here('parquet/extract.parquet'), results)
 ```
@@ -207,18 +206,18 @@ def extract(file_path: str) -> dict | None:
     if not (parser := parse_html(Path(file_path))):
         return None
     p = wrap_parser(parser)
-    dts = p.ss('dt').re
+    dt_scan = p.ii('dt').scan
     return {
-        'ページURL': p.s('meta[name="domx:url"]').attr('content'),
-        '保存日時': p.s('meta[name="domx:saved_at"]').attr('content'),
+        'ページURL': p.i('meta[name="domx:url"]').attr('content'),
+        '保存日時': p.i('meta[name="domx:saved_at"]').attr('content'),
         'ファイルパス': file_path,
-        '教室名': p.s('h1 .text02').text,
-        '住所': p.s('.item .mapText').text,
-        '所在地': dts.s(r'所在地').next('dd').text,
-        '交通': dts.s(r'交通').next('dd').text,
-        '価格': dts.s(r'価格').next('dd').text,
-        '設備・条件': dts.s(r'設備').next('dd').text,
-        '備考': dts.s(r'備考').next('dd').text,
+        '教室名': p.i('h1 .text02').text,
+        '住所': p.i('.item .mapText').text,
+        '所在地': dt_scan.m(r'所在地').n('dd').text,
+        '交通': dt_scan.m(r'交通').n('dd').text,
+        '価格': dt_scan.m(r'価格').n('dd').text,
+        '設備・条件': dt_scan.m(r'設備').n('dd').text,
+        '備考': dt_scan.m(r'備考').n('dd').text,
     }
 
 if __name__ == '__main__':

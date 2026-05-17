@@ -72,19 +72,22 @@ class WrappedFrame(_PageScoped):
     def raw(self) -> Frame | None:
         return self._frame
 
-    def s(self, selector: str) -> WrappedElement:
+    def i(self, selector: str) -> WrappedElement:
+        '''in'''
         if self._frame is None:
             return self.wrap_element(None)
         elem = self._frame.query_selector(selector)
         return self.wrap_element(elem)
 
-    def ss(self, selector: str) -> WrappedElementGroup:
+    def ii(self, selector: str) -> WrappedElementGroup:
+        '''in all'''
         if self._frame is None:
             return self.wrap_element_group([])
         elems = self._frame.query_selector_all(selector)
         return self.wrap_element_group([self.wrap_element(e) for e in elems])
 
-    def wait(self, selector: str, state: str = 'attached', timeout: int = 15000) -> WrappedElement:
+    def w(self, selector: str, state: str = 'attached', timeout: int = 15000) -> WrappedElement:
+        '''wait'''
         if self._frame is None:
             return self.wrap_element(None)
         try:
@@ -105,11 +108,13 @@ class WrappedPage(_PageScoped):
     def raw(self) -> Page:
         return self._page
 
-    def s(self, selector: str) -> WrappedElement:
+    def i(self, selector: str) -> WrappedElement:
+        '''in'''
         elem = self._page.query_selector(selector)
         return self.wrap_element(elem)
 
-    def ss(self, selector: str) -> WrappedElementGroup:
+    def ii(self, selector: str) -> WrappedElementGroup:
+        '''in all'''
         elems = self._page.query_selector_all(selector)
         return self.wrap_element_group([self.wrap_element(e) for e in elems])
 
@@ -169,7 +174,8 @@ class WrappedPage(_PageScoped):
         finally:
             new_page.close()
 
-    def wait(self, selector: str, state: str = 'attached', timeout: int = 15000) -> WrappedElement:
+    def w(self, selector: str, state: str = 'attached', timeout: int = 15000) -> WrappedElement:
+        '''wait'''
         try:
             elem = self._page.wait_for_selector(selector, state=state, timeout=timeout)
             return self.wrap_element(elem)
@@ -190,11 +196,13 @@ class WrappedElement(_PageScoped):
     def raw(self) -> ElementHandle | None:
         return self._elem
 
-    def s(self, selector: str) -> WrappedElement:
+    def i(self, selector: str) -> WrappedElement:
+        '''in'''
         elem = self._elem.query_selector(selector) if self._elem else None
         return self.wrap_element(elem)
 
-    def ss(self, selector: str) -> WrappedElementGroup:
+    def ii(self, selector: str) -> WrappedElementGroup:
+        '''in all'''
         elems = self._elem.query_selector_all(selector) if self._elem else []
         return self.wrap_element_group([self.wrap_element(e) for e in elems])
 
@@ -237,14 +245,17 @@ class WrappedElement(_PageScoped):
             logger.error(f'[{label}] {self._elem} {type(e).__name__}: {e}')
             return self.wrap_element(None)
 
-    def next(self, selector: str) -> WrappedElement:
-        return self._walk_relative(selector, _ELEMENT_NEXT, 'next')
+    def n(self, selector: str) -> WrappedElement:
+        '''next'''
+        return self._walk_relative(selector, _ELEMENT_NEXT, 'n')
 
-    def prev(self, selector: str) -> WrappedElement:
-        return self._walk_relative(selector, _ELEMENT_PREV, 'prev')
+    def p(self, selector: str) -> WrappedElement:
+        '''prev'''
+        return self._walk_relative(selector, _ELEMENT_PREV, 'p')
 
-    def parent(self, selector: str) -> WrappedElement:
-        return self._walk_relative(selector, _ELEMENT_PARENT, 'parent')
+    def o(self, selector: str) -> WrappedElement:
+        '''out'''
+        return self._walk_relative(selector, _ELEMENT_PARENT, 'o')
 
     @property
     def text(self) -> str | None:
@@ -394,40 +405,42 @@ class WrappedElementGroup(_PageScoped):
         return self._elems
 
     @property
-    def re(self) -> ElementGrep:
+    def scan(self) -> ElementScan:
         pairs: list[tuple[str, WrappedElement]] = []
         for e in self._elems:
             if (t := e.text):
                 pairs.append((ud.normalize('NFKC', t), e))
-        return ElementGrep(self._page, pairs)
+        return ElementScan(self._page, pairs)
 
     @property
     def urls(self) -> list[str]:
         return [u for e in self._elems if (u := e.url)]
 
 
-class ElementGrep(_PageScoped):
+class ElementScan(_PageScoped):
     def __init__(self, page: Page, pairs: list[tuple[str, WrappedElement]]) -> None:
         self._page = page
         self._pairs = pairs
 
-    def s(self, pattern: str) -> WrappedElement:
+    def m(self, pattern: str) -> WrappedElement:
+        '''match'''
         try:
             prog = re.compile(pattern)
             for text, e in self._pairs:
                 if prog.search(text):
                     return e
         except Exception as e:
-            logger.warning(f'[grep] {type(e).__name__}: {e} | pattern={pattern!r}')
+            logger.warning(f'[scan] {type(e).__name__}: {e} | pattern={pattern!r}')
         return self.wrap_element(None)
 
-    def ss(self, pattern: str) -> WrappedElementGroup:
+    def mm(self, pattern: str) -> WrappedElementGroup:
+        '''match all'''
         try:
             prog = re.compile(pattern)
             filtered = [e for text, e in self._pairs if prog.search(text)]
             return self.wrap_element_group(filtered)
         except Exception as e:
-            logger.warning(f'[grep] {type(e).__name__}: {e} | pattern={pattern!r}')
+            logger.warning(f'[scan] {type(e).__name__}: {e} | pattern={pattern!r}')
             return self.wrap_element_group([])
 
 
@@ -439,11 +452,13 @@ class WrappedParser:
     def raw(self) -> LexborHTMLParser:
         return self._parser
 
-    def s(self, selector: str) -> WrappedNode:
+    def i(self, selector: str) -> WrappedNode:
+        '''in'''
         node = self._parser.css_first(selector)
         return wrap_node(node)
 
-    def ss(self, selector: str) -> WrappedNodeGroup:
+    def ii(self, selector: str) -> WrappedNodeGroup:
+        '''in all'''
         nodes = self._parser.css(selector)
         return wrap_node_group([wrap_node(n) for n in nodes])
 
@@ -459,11 +474,13 @@ class WrappedNode:
     def raw(self) -> LexborNode | None:
         return self._node
 
-    def s(self, selector: str) -> WrappedNode:
+    def i(self, selector: str) -> WrappedNode:
+        '''in'''
         node = self._node.css_first(selector) if self._node else None
         return wrap_node(node)
 
-    def ss(self, selector: str) -> WrappedNodeGroup:
+    def ii(self, selector: str) -> WrappedNodeGroup:
+        '''in all'''
         nodes = self._node.css(selector) if self._node else []
         return wrap_node_group([wrap_node(n) for n in nodes])
 
@@ -477,13 +494,16 @@ class WrappedNode:
             cur = getattr(cur, axis)
         return wrap_node(None)
 
-    def next(self, selector: str) -> WrappedNode:
+    def n(self, selector: str) -> WrappedNode:
+        '''next'''
         return self._walk_relative(selector, _NODE_NEXT)
 
-    def prev(self, selector: str) -> WrappedNode:
+    def p(self, selector: str) -> WrappedNode:
+        '''prev'''
         return self._walk_relative(selector, _NODE_PREV)
 
-    def parent(self, selector: str) -> WrappedNode:
+    def o(self, selector: str) -> WrappedNode:
+        '''out'''
         return self._walk_relative(selector, _NODE_PARENT)
 
     @property
@@ -526,33 +546,35 @@ class WrappedNodeGroup:
         return self._nodes
 
     @property
-    def re(self) -> NodeGrep:
+    def scan(self) -> NodeScan:
         pairs: list[tuple[str, WrappedNode]] = []
         for n in self._nodes:
             if (t := n.text):
                 pairs.append((ud.normalize('NFKC', t), n))
-        return NodeGrep(pairs)
+        return NodeScan(pairs)
 
 
-class NodeGrep:
+class NodeScan:
     def __init__(self, pairs: list[tuple[str, WrappedNode]]) -> None:
         self._pairs = pairs
 
-    def s(self, pattern: str) -> WrappedNode:
+    def m(self, pattern: str) -> WrappedNode:
+        '''match'''
         try:
             prog = re.compile(pattern)
             for text, n in self._pairs:
                 if prog.search(text):
                     return n
         except Exception as e:
-            logger.warning(f'[grep] {type(e).__name__}: {e} | pattern={pattern!r}')
+            logger.warning(f'[scan] {type(e).__name__}: {e} | pattern={pattern!r}')
         return wrap_node(None)
 
-    def ss(self, pattern: str) -> WrappedNodeGroup:
+    def mm(self, pattern: str) -> WrappedNodeGroup:
+        '''match all'''
         try:
             prog = re.compile(pattern)
             filtered = [n for text, n in self._pairs if prog.search(text)]
             return wrap_node_group(filtered)
         except Exception as e:
-            logger.warning(f'[grep] {type(e).__name__}: {e} | pattern={pattern!r}')
+            logger.warning(f'[scan] {type(e).__name__}: {e} | pattern={pattern!r}')
             return wrap_node_group([])
