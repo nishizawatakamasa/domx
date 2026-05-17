@@ -1,8 +1,8 @@
 from .domx import (
-    ElementGrep,
     ElementHandle,
+    ElementScan,
     Frame,
-    NodeGrep,
+    NodeScan,
     Page,
     Response,
     WrappedElement,
@@ -31,9 +31,9 @@ __all__ = [
     "WrappedFrame",
     "WrappedElement",
     "WrappedElementGroup",
-    "ElementGrep",
+    "ElementScan",
     "WrappedParser",
     "WrappedNode",
     "WrappedNodeGroup",
-    "NodeGrep",
+    "NodeScan",
 ]
