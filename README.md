@@ -151,7 +151,7 @@ with camoufox_page() as page:
         file_name = f'{hash_name(url)}.html'
         html = meta_html({
             'domx:id': i,
-            'domx:url': page.url,
+            'domx:page_url': page.url,
             'domx:saved_at': datetime.now(timezone.utc),
         }) + page.content()
         if not write_text(here('html') / file_name, html):
@@ -176,7 +176,7 @@ for i, file_path in enumerate(here('html').glob('*.html'),1):
     p = wrap_parser(parser)
     dt_scan = p.ii('dt').scan
     results.append({
-        'ページURL': p.i('meta[name="domx:url"]').attr('content'),
+        'ページURL': p.i('meta[name="domx:page_url"]').attr('content'),
         '保存日時': p.i('meta[name="domx:saved_at"]').attr('content'),
         'ファイル名': file_path.name,
         '教室名': p.i('h1 .text02').text,
@@ -208,7 +208,7 @@ def extract(file_path: str) -> dict | None:
     p = wrap_parser(parser)
     dt_scan = p.ii('dt').scan
     return {
-        'ページURL': p.i('meta[name="domx:url"]').attr('content'),
+        'ページURL': p.i('meta[name="domx:page_url"]').attr('content'),
         '保存日時': p.i('meta[name="domx:saved_at"]').attr('content'),
         'ファイルパス': file_path,
         '教室名': p.i('h1 .text02').text,
