@@ -47,6 +47,9 @@ class _PageScoped:
     def wrap_frame(self, frame: Frame | None) -> WrappedFrame:
         return WrappedFrame(self._page, frame)
 
+    def wrap_shadow_root(self, host: ElementHandle | None) -> WrappedShadowRoot:
+        return WrappedShadowRoot(self._page, host)
+
 
 def wrap_parser(parser: LexborHTMLParser) -> WrappedParser:
     return WrappedParser(parser)
@@ -100,6 +103,80 @@ class WrappedFrame(_PageScoped):
             return self.wrap_element(None)
 
 
+class WrappedShadowRoot(_PageScoped):
+    def __init__(self, page: Page, host: ElementHandle | None) -> None:
+        self._page = page
+        self._host = host
+
+    def __bool__(self) -> bool:
+        if self._host is None:
+            return False
+        try:
+            return bool(self._host.evaluate('el => Boolean(el.shadowRoot)'))
+        except Exception as e:
+            logger.error(f'[shadow] {type(e).__name__}: {e}')
+            return False
+
+    def i(self, selector: str) -> WrappedElement:
+        '''in'''
+        if not self:
+            return self.wrap_element(None)
+        try:
+            elem = self._host.evaluate_handle(
+                '(el, sel) => el.shadowRoot?.querySelector(sel) ?? null',
+                selector,
+            ).as_element()
+            return self.wrap_element(elem)
+        except Exception as e:
+            logger.error(f'[shadow i] {type(e).__name__}: {e} | selector={selector!r}')
+            return self.wrap_element(None)
+
+    def ii(self, selector: str) -> WrappedElementGroup:
+        '''in all'''
+        if not self:
+            return self.wrap_element_group([])
+        try:
+            n = self._host.evaluate(
+                '(el, sel) => el.shadowRoot?.querySelectorAll(sel)?.length ?? 0',
+                selector,
+            )
+            elems = []
+            for idx in range(n):
+                elem = self._host.evaluate_handle(
+                    '''(el, args) => {
+                        const [sel, i] = args;
+                        return el.shadowRoot.querySelectorAll(sel)[i];
+                    }''',
+                    [selector, idx],
+                ).as_element()
+                elems.append(self.wrap_element(elem))
+            return self.wrap_element_group(elems)
+        except Exception as e:
+            logger.error(f'[shadow ii] {type(e).__name__}: {e} | selector={selector!r}')
+            return self.wrap_element_group([])
+
+    def w(self, selector: str, timeout: int = 15000) -> WrappedElement:
+        '''wait (attached in shadow root only)'''
+        if not self:
+            return self.wrap_element(None)
+        frame = self._host.owner_frame()
+        if frame is None:
+            logger.warning('[shadow wait] owner_frame is None')
+            return self.wrap_element(None)
+        try:
+            frame.wait_for_function(
+                '([el, sel]) => Boolean(el.shadowRoot?.querySelector(sel))',
+                [self._host, selector],
+                timeout=timeout,
+            )
+            return self.i(selector)
+        except Exception as e:
+            logger.warning(
+                f'[shadow wait] {type(e).__name__}: {e} | selector={selector!r} | url={self._page.url!r}'
+            )
+            return self.wrap_element(None)
+
+
 class WrappedPage(_PageScoped):
     def __init__(self, page: Page) -> None:
         self._page = page
@@ -117,17 +194,6 @@ class WrappedPage(_PageScoped):
         '''in all'''
         elems = self._page.query_selector_all(selector)
         return self.wrap_element_group([self.wrap_element(e) for e in elems])
-
-    def frame(self, iframe_selector: str) -> WrappedFrame:
-        iframe_elem = self._page.query_selector(iframe_selector)
-        if iframe_elem is None:
-            return self.wrap_frame(None)
-        try:
-            fr = iframe_elem.content_frame()
-            return self.wrap_frame(fr)
-        except Exception as e:
-            logger.error(f'[frame] {type(e).__name__}: {e} | iframe_selector={iframe_selector!r}')
-            return self.wrap_frame(None)
 
     def goto(
         self,
@@ -198,31 +264,31 @@ class WrappedElement(_PageScoped):
 
     def i(self, selector: str) -> WrappedElement:
         '''in'''
-        elem = self._elem.query_selector(selector) if self._elem else None
+        if self._elem is None:
+            return self.wrap_element(None)
+        elem = self._elem.query_selector(selector)
         return self.wrap_element(elem)
 
     def ii(self, selector: str) -> WrappedElementGroup:
         '''in all'''
-        elems = self._elem.query_selector_all(selector) if self._elem else []
+        if self._elem is None:
+            return self.wrap_element_group([])
+        elems = self._elem.query_selector_all(selector)
         return self.wrap_element_group([self.wrap_element(e) for e in elems])
 
-    def frame(self, iframe_selector: str | None = None) -> WrappedFrame:
+    @property
+    def frame(self) -> WrappedFrame:
         if self._elem is None:
             return self.wrap_frame(None)
         try:
-            if iframe_selector is None:
-                fr = self._elem.content_frame()
-            else:
-                iframe_elem = self._elem.query_selector(iframe_selector)
-                if iframe_elem is None:
-                    return self.wrap_frame(None)
-                fr = iframe_elem.content_frame()
-            return self.wrap_frame(fr)
+            return self.wrap_frame(self._elem.content_frame())
         except Exception as e:
-            logger.error(
-                f'[frame] {type(e).__name__}: {e} | iframe_selector={iframe_selector!r}'
-            )
+            logger.error(f'[frame] {type(e).__name__}: {e}')
             return self.wrap_frame(None)
+
+    @property
+    def shadow(self) -> WrappedShadowRoot:
+        return self.wrap_shadow_root(self._elem)
 
     def _walk_relative(self, selector: str, axis: str, label: str) -> WrappedElement:
         if self._elem is None:
@@ -476,12 +542,16 @@ class WrappedNode:
 
     def i(self, selector: str) -> WrappedNode:
         '''in'''
-        node = self._node.css_first(selector) if self._node else None
+        if self._node is None:
+            return wrap_node(None)
+        node = self._node.css_first(selector)
         return wrap_node(node)
 
     def ii(self, selector: str) -> WrappedNodeGroup:
         '''in all'''
-        nodes = self._node.css(selector) if self._node else []
+        if self._node is None:
+            return wrap_node_group([])
+        nodes = self._node.css(selector)
         return wrap_node_group([wrap_node(n) for n in nodes])
 
     def _walk_relative(self, selector: str, axis: str) -> WrappedNode:
