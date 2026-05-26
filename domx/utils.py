@@ -57,6 +57,25 @@ def append_csv(path: Path, row: dict) -> None:
     except Exception as e:
         logger.error(f'[append_csv] {path} {row} {type(e).__name__}: {e}')
 
+def write_csv(path: Path, rows: list[dict]) -> None:
+    '''``rows`` を CSV ファイルとして書き出す（上書き）。
+
+    Excel 互換のため UTF-8 BOM（``utf-8-sig``）とヘッダ行を付ける。
+    ``rows`` が空ならスキップ（警告のみ）。列順は先頭行の ``keys()`` の順で、
+    2 回目以降のキーずれは検知しない（``append_csv`` と同じ）。
+    '''
+    try:
+        if not rows:
+            logger.warning(f'[write_csv] {path} no rows, skipped')
+            return
+        _ensure_parent(path)
+        with open(path, mode='w', newline='', encoding='utf-8-sig') as f:
+            w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+            w.writeheader()
+            w.writerows(rows)
+    except Exception as e:
+        logger.error(f'[write_csv] {path} {type(e).__name__}: {e}')
+
 def write_parquet(path: Path, rows: list[dict]) -> None:
     '''``rows`` を Parquet ファイルとして書き出す。
 
