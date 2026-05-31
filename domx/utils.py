@@ -130,12 +130,12 @@ class _SafeWorker:
         try:
             return self.fn(x)
         except Exception as e:
-            logger.error(f'[pool_map] {type(e).__name__}: {e}')
+            logger.error(f'[process_map] {type(e).__name__}: {e}')
             return None
 
 
 def _auto_chunksize(n: int, workers: int | None) -> int:
-    '''``chunksize`` を自動で決める（``pool_map`` で未指定のとき）。
+    '''``chunksize`` を自動で決める（``process_map`` で未指定のとき）。
 
     子プロセスへは 1 件ずつより、まとめて送った方が速くなりやすい。そのまとめ数。
 
@@ -160,7 +160,7 @@ def _auto_chunksize(n: int, workers: int | None) -> int:
     return max(1, min(64, n // (w * 4)))
 
 
-def pool_map[T, R](
+def process_map[T, R](
     worker: Callable[[T], R],
     items: Iterable[T],
     workers: int | None = None,
@@ -187,7 +187,7 @@ def glob_paths(dir_path: Path, pattern: str = '*.html') -> list[str]:
     '''
     ``dir_path`` 直下で ``pattern`` に一致するパスを ``str`` のリストで返す。
 
-    ``str`` にしているのは ``pool_map`` 等のプロセスプールへ渡すとき pickle しやすくするため。
+    ``str`` にしているのは ``process_map`` 等のプロセスプールへ渡すとき pickle しやすくするため。
     '''
     return [str(p) for p in dir_path.glob(pattern)]
 

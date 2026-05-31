@@ -214,10 +214,10 @@ class WrappedPage(_PageScoped):
                 reason = 'response is None'
             except Exception as e:
                 reason = f'{type(e).__name__}: {e}'
-            logger.warning(f'[goto] {url!r} ({i+1}/{try_cnt}) {reason}')
+            logger.warning(f'[goto] retry ({i+1}/{try_cnt}) {reason}: {url!r}')
             if i + 1 < try_cnt:
                 time.sleep(random.uniform(*wait_range))
-        logger.error(f'[goto] giving up: {url!r}')
+        logger.error(f'[goto] retries exhausted ({try_cnt}): {url!r}')
         return None
     
     def bytes_at(self, url: str | None) -> bytes | None:
