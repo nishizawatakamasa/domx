@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 import random
 import re
 import time
@@ -29,6 +29,10 @@ _ELEMENT_PARENT = 'parentElement'
 _NODE_NEXT = 'next'
 _NODE_PREV = 'prev'
 _NODE_PARENT = 'parent'
+
+
+def _collect_str[T](items: list[T], getter: Callable[[T], str | None]) -> list[str]:
+    return [v for item in items if (v := getter(item))]
 
 
 def wrap_page(page: Page) -> WrappedPage:
@@ -479,8 +483,19 @@ class WrappedElementGroup(_PageScoped):
         return ElementScan(self._page, pairs)
 
     @property
+    def texts(self) -> list[str]:
+        return _collect_str(self._elems, lambda e: e.text)
+
+    def attrs(self, attr_name: str) -> list[str]:
+        return _collect_str(self._elems, lambda e: e.attr(attr_name))
+
+    @property
     def urls(self) -> list[str]:
-        return [u for e in self._elems if (u := e.url)]
+        return _collect_str(self._elems, lambda e: e.url)
+
+    @property
+    def srcs(self) -> list[str]:
+        return _collect_str(self._elems, lambda e: e.src)
 
 
 class ElementScan(_PageScoped):
@@ -622,6 +637,13 @@ class WrappedNodeGroup:
             if (t := n.text):
                 pairs.append((ud.normalize('NFKC', t), n))
         return NodeScan(pairs)
+
+    @property
+    def texts(self) -> list[str]:
+        return _collect_str(self._nodes, lambda n: n.text)
+
+    def attrs(self, attr_name: str) -> list[str]:
+        return _collect_str(self._nodes, lambda n: n.attr(attr_name))
 
 
 class NodeScan:

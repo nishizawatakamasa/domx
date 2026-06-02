@@ -167,6 +167,8 @@ def extract(file_path: str) -> dict | None:
         
         'スタッフからのコメント': p.ii('div').scan.m(r'スタッフからのコメント').n('div').text,
         '物件の魅力': p.ii('p').scan.m(r'物件の魅力').n('p').text,
+        
+        'img_desc': '\n'.join(p.ii('p.text-left').scan.m(r'画像をクリックすると拡大画像がご覧に').n('ul').ii('li').texts)
     }
 
 if __name__ == '__main__':
@@ -219,8 +221,19 @@ df['間取'] = df_raw['間取']
 df['成約年月'] = df_raw['現況'].map({'空': '販売中'})
 df['私道負担'] = df_raw['私道面積'].map({'無': 'なし'})
 df['接道'] = df_raw['接道状況']
-df['小学校'] = df_raw['物件の魅力'].str.extract(r'(?m)^・(.+?小学校)')
-df['中学校'] = df_raw['物件の魅力'].str.extract(r'(?m)^・(.+?中学校)')
+
+s1 = df_raw['物件の魅力'].str.extract(r'([^/\s【】・、]+?小学校)', expand=False)
+s2 = df_raw['備考'].str.extract(r'([^/\s【】・、]+?小学校)', expand=False)
+s3 = df_raw['最寄りの学校'].str.extract(r'([^/\s【】・、]+?小学校)', expand=False) 
+s4 = df_raw['img_desc'].str.extract(r'([^/\s【】・、]+?小学校)', expand=False) 
+df['小学校'] = s1.fillna(s2).fillna(s3).fillna(s4)
+
+s1 = df_raw['物件の魅力'].str.extract(r'([^/\s【】・、]+?中学校)', expand=False)
+s2 = df_raw['備考'].str.extract(r'([^/\s【】・、]+?中学校)', expand=False)
+s3 = df_raw['最寄りの学校'].str.extract(r'([^/\s【】・、]+?中学校)', expand=False) 
+s4 = df_raw['img_desc'].str.extract(r'([^/\s【】・、]+?中学校)', expand=False) 
+df['中学校'] = s1.fillna(s2).fillna(s3).fillna(s4)
+
 df['周辺環境'] = df_raw['備考'].map(lambda x: '\n'.join(l for l in x.splitlines() if re.search(r'(?:\d分|\dm)$', l)))
 df['都市計画'] = df_raw['都市計画']
 df['用途地域'] = df_raw['用途地域']
