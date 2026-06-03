@@ -8,6 +8,42 @@
 ※ `patchright_page` を使うとき：Google ChromeをPCにインストールしておく。  
 ※ `camoufox_page` を使うとき：`uv run camoufox fetch`  
 
+## 実装機能
+
+### domx
+
+- `WrappedPage`
+- `WrappedElement`
+- `WrappedElementGroup`
+- `ElementScan`
+- `WrappedFrame`
+- `WrappedShadowRoot`
+- `WrappedParser`
+- `WrappedNode`
+- `WrappedNodeGroup`
+- `NodeScan`
+
+### domx.utils
+
+- `parse_html(path: Path) -> LexborHTMLParser | None`
+- `meta_html(meta: Mapping[str, object | None]) -> str`
+- `from_here(file: str) -> Callable[[str], Path]`
+- `append_csv(path: Path, row: dict) -> None`
+- `write_csv(path: Path, rows: list[dict]) -> None`
+- `write_parquet(path: Path, rows: list[dict]) -> None`
+- `hash_name(key: str) -> str`
+- `write_text(path: Path, data: str) -> bool`
+- `write_bytes(path: Path, data: bytes) -> bool`
+- `save_log(path: Path, level: str = 'WARNING') -> None`
+- `process_map[T, R](worker: Callable[[T], R], items: Iterable[T], workers: int | None = None, *, chunksize: int | None = None) -> list[R | None]`
+- `glob_paths(dir_path: Path, pattern: str = '*.html') -> list[str]`
+- `counter(start: int = 1) -> Iterator[int]`
+
+### domx.browser
+
+- `patchright_page(*, large_viewport: bool = False) -> Iterator[Page]`
+- `camoufox_page(*, large_viewport: bool = False) -> Iterator[Page]`
+
 ## 使用例
 
 ### crawl.py
@@ -218,20 +254,20 @@ df['構造体'] = df_raw['建物構造'].str.extract(r'^(\S+)')
 df['階層'] = df_raw['建物構造'].str.extract(r'(\d+)階')
 df['リノベ内容'] = df_raw['備考'].str.extract(r'(?s)^(20\d{2}/.*?)\n\D')
 df['間取'] = df_raw['間取']
-df['成約年月'] = df_raw['現況'].map({'空': '販売中'})
-df['私道負担'] = df_raw['私道面積'].map({'無': 'なし'})
+df['成約年月'] = df_raw['現況'].map({'空': '販売中', '古家付': '販売中'})
+df['私道負担'] = df_raw['私道面積']
 df['接道'] = df_raw['接道状況']
 
-s1 = df_raw['物件の魅力'].str.extract(r'([^/\s【】・、]+?小学校)', expand=False)
-s2 = df_raw['備考'].str.extract(r'([^/\s【】・、]+?小学校)', expand=False)
-s3 = df_raw['最寄りの学校'].str.extract(r'([^/\s【】・、]+?小学校)', expand=False) 
-s4 = df_raw['img_desc'].str.extract(r'([^/\s【】・、]+?小学校)', expand=False) 
+s1 = df_raw['最寄りの学校'].str.extract(r'([^/\s【】・、(]+?小学校)', expand=False) 
+s2 = df_raw['物件の魅力'].str.extract(r'([^/\s【】・、(]+?小学校)', expand=False)
+s3 = df_raw['備考'].str.extract(r'([^/\s【】・、(]+?小学校)', expand=False)
+s4 = df_raw['img_desc'].str.extract(r'([^/\s【】・、(]+?小学校)', expand=False) 
 df['小学校'] = s1.fillna(s2).fillna(s3).fillna(s4)
 
-s1 = df_raw['物件の魅力'].str.extract(r'([^/\s【】・、]+?中学校)', expand=False)
-s2 = df_raw['備考'].str.extract(r'([^/\s【】・、]+?中学校)', expand=False)
-s3 = df_raw['最寄りの学校'].str.extract(r'([^/\s【】・、]+?中学校)', expand=False) 
-s4 = df_raw['img_desc'].str.extract(r'([^/\s【】・、]+?中学校)', expand=False) 
+s1 = df_raw['最寄りの学校'].str.extract(r'([^/\s【】・、(]+?中学校)', expand=False) 
+s2 = df_raw['物件の魅力'].str.extract(r'([^/\s【】・、(]+?中学校)', expand=False)
+s3 = df_raw['備考'].str.extract(r'([^/\s【】・、(]+?中学校)', expand=False)
+s4 = df_raw['img_desc'].str.extract(r'([^/\s【】・、(]+?中学校)', expand=False) 
 df['中学校'] = s1.fillna(s2).fillna(s3).fillna(s4)
 
 df['周辺環境'] = df_raw['備考'].map(lambda x: '\n'.join(l for l in x.splitlines() if re.search(r'(?:\d分|\dm)$', l)))
@@ -247,6 +283,12 @@ df['駐車場'] = df_raw['駐車場']
 df['交通'] = df_raw['交通']
 df['物件の特徴'] = df_raw['物件の魅力']
 df['仕様'] = df_raw['設備・条件']
+
+df['土地権利'] = df_raw['土地権利']
+df['地目'] = df_raw['地目']
+df['引渡日（入居予定日）'] = df_raw['引渡日（入居予定日）']
+df['物件番号'] = df_raw['物件番号']
+df['情報更新日'] = df_raw['情報更新日']
 ```
 ```python
 df.to_clipboard(index=False)

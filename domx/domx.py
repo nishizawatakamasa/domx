@@ -67,120 +67,6 @@ def wrap_node_group(nodes: list[WrappedNode]) -> WrappedNodeGroup:
     return WrappedNodeGroup(nodes)
 
 
-class WrappedFrame(_PageScoped):
-    def __init__(self, page: Page, frame: Frame | None) -> None:
-        self._page = page
-        self._frame = frame
-
-    def __bool__(self) -> bool:
-        return self._frame is not None
-
-    @property
-    def raw(self) -> Frame | None:
-        return self._frame
-
-    def i(self, selector: str) -> WrappedElement:
-        '''in'''
-        if self._frame is None:
-            return self.wrap_element(None)
-        elem = self._frame.query_selector(selector)
-        return self.wrap_element(elem)
-
-    def ii(self, selector: str) -> WrappedElementGroup:
-        '''in all'''
-        if self._frame is None:
-            return self.wrap_element_group([])
-        elems = self._frame.query_selector_all(selector)
-        return self.wrap_element_group([self.wrap_element(e) for e in elems])
-
-    def w(self, selector: str, state: str = 'attached', timeout: int = 15000) -> WrappedElement:
-        '''wait'''
-        if self._frame is None:
-            return self.wrap_element(None)
-        try:
-            elem = self._frame.wait_for_selector(selector, state=state, timeout=timeout)
-            return self.wrap_element(elem)
-        except Exception as e:
-            logger.warning(
-                f'[wait] {type(e).__name__}: {e} | selector={selector!r} | url={self._page.url!r}'
-            )
-            return self.wrap_element(None)
-
-
-class WrappedShadowRoot(_PageScoped):
-    def __init__(self, page: Page, host: ElementHandle | None) -> None:
-        self._page = page
-        self._host = host
-
-    def __bool__(self) -> bool:
-        if self._host is None:
-            return False
-        try:
-            return bool(self._host.evaluate('el => Boolean(el.shadowRoot)'))
-        except Exception as e:
-            logger.error(f'[shadow] {type(e).__name__}: {e}')
-            return False
-
-    def i(self, selector: str) -> WrappedElement:
-        '''in'''
-        if not self:
-            return self.wrap_element(None)
-        try:
-            elem = self._host.evaluate_handle(
-                '(el, sel) => el.shadowRoot?.querySelector(sel) ?? null',
-                selector,
-            ).as_element()
-            return self.wrap_element(elem)
-        except Exception as e:
-            logger.error(f'[shadow i] {type(e).__name__}: {e} | selector={selector!r}')
-            return self.wrap_element(None)
-
-    def ii(self, selector: str) -> WrappedElementGroup:
-        '''in all'''
-        if not self:
-            return self.wrap_element_group([])
-        try:
-            n = self._host.evaluate(
-                '(el, sel) => el.shadowRoot?.querySelectorAll(sel)?.length ?? 0',
-                selector,
-            )
-            elems = []
-            for idx in range(n):
-                elem = self._host.evaluate_handle(
-                    '''(el, args) => {
-                        const [sel, i] = args;
-                        return el.shadowRoot.querySelectorAll(sel)[i];
-                    }''',
-                    [selector, idx],
-                ).as_element()
-                elems.append(self.wrap_element(elem))
-            return self.wrap_element_group(elems)
-        except Exception as e:
-            logger.error(f'[shadow ii] {type(e).__name__}: {e} | selector={selector!r}')
-            return self.wrap_element_group([])
-
-    def w(self, selector: str, timeout: int = 15000) -> WrappedElement:
-        '''wait (attached in shadow root only)'''
-        if not self:
-            return self.wrap_element(None)
-        frame = self._host.owner_frame()
-        if frame is None:
-            logger.warning('[shadow wait] owner_frame is None')
-            return self.wrap_element(None)
-        try:
-            frame.wait_for_function(
-                '([el, sel]) => Boolean(el.shadowRoot?.querySelector(sel))',
-                [self._host, selector],
-                timeout=timeout,
-            )
-            return self.i(selector)
-        except Exception as e:
-            logger.warning(
-                f'[shadow wait] {type(e).__name__}: {e} | selector={selector!r} | url={self._page.url!r}'
-            )
-            return self.wrap_element(None)
-
-
 class WrappedPage(_PageScoped):
     def __init__(self, page: Page) -> None:
         self._page = page
@@ -523,6 +409,120 @@ class ElementScan(_PageScoped):
         except Exception as e:
             logger.warning(f'[scan] {type(e).__name__}: {e} | pattern={pattern!r}')
             return self.wrap_element_group([])
+
+
+class WrappedFrame(_PageScoped):
+    def __init__(self, page: Page, frame: Frame | None) -> None:
+        self._page = page
+        self._frame = frame
+
+    def __bool__(self) -> bool:
+        return self._frame is not None
+
+    @property
+    def raw(self) -> Frame | None:
+        return self._frame
+
+    def i(self, selector: str) -> WrappedElement:
+        '''in'''
+        if self._frame is None:
+            return self.wrap_element(None)
+        elem = self._frame.query_selector(selector)
+        return self.wrap_element(elem)
+
+    def ii(self, selector: str) -> WrappedElementGroup:
+        '''in all'''
+        if self._frame is None:
+            return self.wrap_element_group([])
+        elems = self._frame.query_selector_all(selector)
+        return self.wrap_element_group([self.wrap_element(e) for e in elems])
+
+    def w(self, selector: str, state: str = 'attached', timeout: int = 15000) -> WrappedElement:
+        '''wait'''
+        if self._frame is None:
+            return self.wrap_element(None)
+        try:
+            elem = self._frame.wait_for_selector(selector, state=state, timeout=timeout)
+            return self.wrap_element(elem)
+        except Exception as e:
+            logger.warning(
+                f'[wait] {type(e).__name__}: {e} | selector={selector!r} | url={self._page.url!r}'
+            )
+            return self.wrap_element(None)
+
+
+class WrappedShadowRoot(_PageScoped):
+    def __init__(self, page: Page, host: ElementHandle | None) -> None:
+        self._page = page
+        self._host = host
+
+    def __bool__(self) -> bool:
+        if self._host is None:
+            return False
+        try:
+            return bool(self._host.evaluate('el => Boolean(el.shadowRoot)'))
+        except Exception as e:
+            logger.error(f'[shadow] {type(e).__name__}: {e}')
+            return False
+
+    def i(self, selector: str) -> WrappedElement:
+        '''in'''
+        if not self:
+            return self.wrap_element(None)
+        try:
+            elem = self._host.evaluate_handle(
+                '(el, sel) => el.shadowRoot?.querySelector(sel) ?? null',
+                selector,
+            ).as_element()
+            return self.wrap_element(elem)
+        except Exception as e:
+            logger.error(f'[shadow i] {type(e).__name__}: {e} | selector={selector!r}')
+            return self.wrap_element(None)
+
+    def ii(self, selector: str) -> WrappedElementGroup:
+        '''in all'''
+        if not self:
+            return self.wrap_element_group([])
+        try:
+            n = self._host.evaluate(
+                '(el, sel) => el.shadowRoot?.querySelectorAll(sel)?.length ?? 0',
+                selector,
+            )
+            elems = []
+            for idx in range(n):
+                elem = self._host.evaluate_handle(
+                    '''(el, args) => {
+                        const [sel, i] = args;
+                        return el.shadowRoot.querySelectorAll(sel)[i];
+                    }''',
+                    [selector, idx],
+                ).as_element()
+                elems.append(self.wrap_element(elem))
+            return self.wrap_element_group(elems)
+        except Exception as e:
+            logger.error(f'[shadow ii] {type(e).__name__}: {e} | selector={selector!r}')
+            return self.wrap_element_group([])
+
+    def w(self, selector: str, timeout: int = 15000) -> WrappedElement:
+        '''wait (attached in shadow root only)'''
+        if not self:
+            return self.wrap_element(None)
+        frame = self._host.owner_frame()
+        if frame is None:
+            logger.warning('[shadow wait] owner_frame is None')
+            return self.wrap_element(None)
+        try:
+            frame.wait_for_function(
+                '([el, sel]) => Boolean(el.shadowRoot?.querySelector(sel))',
+                [self._host, selector],
+                timeout=timeout,
+            )
+            return self.i(selector)
+        except Exception as e:
+            logger.warning(
+                f'[shadow wait] {type(e).__name__}: {e} | selector={selector!r} | url={self._page.url!r}'
+            )
+            return self.wrap_element(None)
 
 
 class WrappedParser:
