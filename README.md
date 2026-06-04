@@ -44,6 +44,12 @@
 - `patchright_page(*, large_viewport: bool = False) -> Iterator[Page]`
 - `camoufox_page(*, large_viewport: bool = False) -> Iterator[Page]`
 
+### domx.http
+
+- `fetch_response(url: str | None, *, try_cnt: int = 3, wait_range: tuple[float, float] = (1, 3), sleep_after: tuple[float, float] | None = (0.5, 1), timeout: float = 30, impersonate: str = "chrome") -> Response | None`
+- `fetch_html(url: str | None, *, ...) -> str | None`
+- `fetch_bytes(url: str | None, *, ...) -> bytes | None`
+
 ## 使用例
 
 ### crawl.py
@@ -139,6 +145,68 @@ with patchright_page() as page:
         if (body := p.bytes_at(main_img_url)):
             write_bytes(here(f'media/{url_index}-img-main.jpg'), body)
 
+```
+
+### scrape_http.py
+```python
+from datetime import datetime, timezone
+from urllib.parse import urljoin
+
+import pandas as pd
+from selectolax.lexbor import LexborHTMLParser
+
+from domx import wrap_parser
+from domx.http import fetch_response, fetch_bytes
+from domx.utils import (
+    save_log,
+    append_csv,
+    from_here,
+    meta_html,
+    hash_name,
+    write_text,
+    write_bytes,
+)
+
+here = from_here(__file__)
+save_log(here('log/scraping.log'))
+
+bukken_urls = pd.read_csv(here('csv/urls.csv'))['url']
+n = len(bukken_urls)
+for url_index, request_url in bukken_urls.items():
+    print(f'url_index {url_index}/{n - 1}')
+
+    if not (res := fetch_response(request_url)):
+        append_csv(here('csv/failed.csv'), {
+            'url_index': url_index,
+            'request_url': request_url,
+            'reason': 'fetch_response',
+        })
+        continue
+
+    html = meta_html({
+        'domx:url_index': url_index,
+        'domx:saved_at': datetime.now(timezone.utc),
+        'domx:request_url': request_url,
+        'domx:final_url': res.url,
+    }) + res.text
+    if not write_text(here('html') / f'{hash_name(res.url)}.html', html):
+        append_csv(here('csv/failed.csv'), {
+            'url_index': url_index,
+            'request_url': request_url,
+            'reason': 'write_text',
+        })
+        continue
+
+    p = wrap_parser(LexborHTMLParser(res.text))
+    img_li_scan = p.ii('p.text-left').scan.m(r'画像をクリックすると拡大画像がご覧に').n('ul').ii('li').scan
+    img_li = img_li_scan.m(r'外観') or img_li_scan.m(r'^(?!.*間取).*')
+    img_href = img_li.i('a').attr('href')
+    if img_href and (body := fetch_bytes(urljoin(res.url, img_href))):
+        write_bytes(here(f'media/{url_index}-img-desc.jpg'), body)
+
+    main_img_src = p.i('img.w-full.object-contain').attr('src')
+    if main_img_src and (body := fetch_bytes(urljoin(res.url, main_img_src))):
+        write_bytes(here(f'media/{url_index}-img-main.jpg'), body)
 ```
 
 ### extract.py
