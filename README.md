@@ -39,10 +39,12 @@
 - `glob_paths(dir_path: Path, pattern: str = '*.html') -> list[str]`
 - `counter(start: int = 1) -> Iterator[int]`
 
-### domx.browser
+### domx.batch
 
-- `patchright_page(*, large_viewport: bool = False) -> Iterator[Page]`
-- `camoufox_page(*, large_viewport: bool = False) -> Iterator[Page]`
+- `Batch[T]`
+- `Batch.attach_patchright_page(*, browser_recreate_every: int | None = 1000, context_recreate_every: int | None = 200, browser_kwargs: dict | None = None, context_kwargs: dict | None = None) -> Iterator[Iterator[tuple[T, PatchrightPage]]]`
+- `Batch.attach_camoufox_page(*, browser_recreate_every: int | None = 1000, context_recreate_every: int | None = 200, browser_kwargs: dict | None = None, context_kwargs: dict | None = None) -> Iterator[Iterator[tuple[T, PlaywrightPage]]]`
+- `batch(items: list[T]) -> Batch[T]`
 
 ### domx.http
 
@@ -57,19 +59,21 @@
 from urllib.parse import urlencode
 
 from domx import wrap_page
-from domx.browser import patchright_page
+from domx.batch import batch
 from domx.utils import save_log, from_here, counter, write_csv
 
 here = from_here(__file__)
 save_log(here('log/crawling.log'))
 
-with patchright_page() as page:
-    p = wrap_page(page)
-    prefecture_urls = ['https://home.katitas.jp/buyers_search/area/nagano']
-
-    n = len(prefecture_urls)
-    urls = []
-    for i, prefecture_url in enumerate(prefecture_urls):
+prefecture_urls = ['https://home.katitas.jp/buyers_search/area/nagano']
+n = len(prefecture_urls)
+urls = []
+with batch(prefecture_urls).attach_patchright_page(
+    browser_kwargs={'channel': 'chrome', 'headless': False},
+    context_kwargs={},
+) as batch_pages:
+    for i, (prefecture_url, page) in enumerate(batch_pages):
+        p = wrap_page(page)
         print(f'prefecture_url {i}/{n - 1}')
         for page_num in counter():
             if not p.goto(f'{prefecture_url}?{urlencode({"page": page_num})}'):
@@ -77,7 +81,7 @@ with patchright_page() as page:
             if not (bukken_elems := p.ii('ul li div a[href^="https://home.katitas.jp"]:has(p)')):
                 break
             urls.extend(bukken_elems.urls)
-    write_csv(here('csv/urls.csv'), [{'url': url} for url in urls])
+write_csv(here('csv/urls.csv'), [{'url': url} for url in urls])
 ```
 
 ### scrape.py
@@ -86,7 +90,7 @@ from datetime import datetime, timezone
 import time
 
 from domx import wrap_page
-from domx.browser import patchright_page
+from domx.batch import batch
 from domx.utils import (
     save_log,
     append_csv,
@@ -101,12 +105,14 @@ import pandas as pd
 here = from_here(__file__)
 save_log(here('log/scraping.log'))
 
-with patchright_page() as page:
-    p = wrap_page(page)
-
-    bukken_urls = pd.read_csv(here('csv/urls.csv'))['url']
-    n = len(bukken_urls)
-    for url_index, request_url in bukken_urls.items():
+bukken_urls = pd.read_csv(here('csv/urls.csv'))['url'].tolist()
+n = len(bukken_urls)
+with batch(bukken_urls).attach_patchright_page(
+    browser_kwargs={'channel': 'chrome', 'headless': False},
+    context_kwargs={},
+) as batch_pages:
+    for url_index, (request_url, page) in enumerate(batch_pages):
+        p = wrap_page(page)
         print(f'url_index {url_index}/{n - 1}')
         if not p.goto(request_url):
             append_csv(here('csv/failed.csv'), {
@@ -145,6 +151,45 @@ with patchright_page() as page:
         if (body := p.bytes_at(main_img_url)):
             write_bytes(here(f'media/{url_index}-img-main.jpg'), body)
 
+```
+
+### scrape_pairs.py（架空の2段パイプライン例）
+```python
+import pandas as pd
+
+from domx import wrap_page
+from domx.batch import batch
+from domx.utils import from_here
+
+here = from_here(__file__)
+items = pd.read_csv(here('csv/urls.csv'))['url'].tolist()
+
+collected_urls = []
+
+with batch(items).attach_patchright_page(
+    browser_recreate_every=1000,
+    context_recreate_every=200,
+    browser_kwargs={'channel': 'chrome', 'headless': False},
+    context_kwargs={'viewport': {'width': 1920, 'height': 1080}},
+) as batch_pages:
+    for request_url, page in batch_pages:
+        p = wrap_page(page)
+        if not p.goto(request_url):
+            continue
+        # collect urls...
+        collected_urls.extend(p.ii('a[href]').urls)
+
+with batch(collected_urls).attach_camoufox_page(
+    browser_recreate_every=500,
+    context_recreate_every=100,
+    browser_kwargs={'headless': False, 'humanize': True},
+    context_kwargs={'viewport': {'width': 1920, 'height': 1080}},
+) as batch_pages:
+    for request_url, page in batch_pages:
+        p = wrap_page(page)
+        if not p.goto(request_url):
+            continue
+        # scrape...
 ```
 
 ### scrape_http.py
