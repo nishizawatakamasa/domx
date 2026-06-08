@@ -26,6 +26,7 @@ class Batch[T]:
         *,
         browser_recreate_every: int | None,
         context_recreate_every: int | None,
+        page_recreate_every: int | None,
         browser_kwargs: dict | None,
         context_kwargs: dict | None,
     ) -> Generator[tuple[T, PatchrightPage], None, None]:
@@ -36,10 +37,11 @@ class Batch[T]:
                 with pw.chromium.launch(**browser_kw) as browser:
                     for context_batch in self._chunked_by_every(browser_batch, context_recreate_every):
                         with browser.new_context(**context_kw) as context:
-                            for item in context_batch:
+                            for page_batch in self._chunked_by_every(context_batch, page_recreate_every):
                                 page = context.new_page()
                                 try:
-                                    yield item, page
+                                    for item in page_batch:
+                                        yield item, page
                                 finally:
                                     page.close()
 
@@ -48,6 +50,7 @@ class Batch[T]:
         *,
         browser_recreate_every: int | None,
         context_recreate_every: int | None,
+        page_recreate_every: int | None,
         browser_kwargs: dict | None,
         context_kwargs: dict | None,
     ) -> Generator[tuple[T, PlaywrightPage], None, None]:
@@ -57,10 +60,11 @@ class Batch[T]:
             with Camoufox(**browser_kw) as browser:
                 for context_batch in self._chunked_by_every(browser_batch, context_recreate_every):
                     with browser.new_context(**context_kw) as context:
-                        for item in context_batch:
+                        for page_batch in self._chunked_by_every(context_batch, page_recreate_every):
                             page = context.new_page()
                             try:
-                                yield item, page
+                                for item in page_batch:
+                                    yield item, page
                             finally:
                                 page.close()
 
@@ -70,12 +74,14 @@ class Batch[T]:
         *,
         browser_recreate_every: int | None = None,
         context_recreate_every: int | None = None,
+        page_recreate_every: int | None = None,
         browser_kwargs: dict | None = None,
         context_kwargs: dict | None = None,
     ) -> Iterator[Iterator[tuple[T, PatchrightPage]]]:
         iterator = self._iter_patchright_item_pages(
             browser_recreate_every=browser_recreate_every,
             context_recreate_every=context_recreate_every,
+            page_recreate_every=page_recreate_every,
             browser_kwargs=browser_kwargs,
             context_kwargs=context_kwargs,
         )
@@ -90,12 +96,14 @@ class Batch[T]:
         *,
         browser_recreate_every: int | None = None,
         context_recreate_every: int | None = None,
+        page_recreate_every: int | None = None,
         browser_kwargs: dict | None = None,
         context_kwargs: dict | None = None,
     ) -> Iterator[Iterator[tuple[T, PlaywrightPage]]]:
         iterator = self._iter_camoufox_item_pages(
             browser_recreate_every=browser_recreate_every,
             context_recreate_every=context_recreate_every,
+            page_recreate_every=page_recreate_every,
             browser_kwargs=browser_kwargs,
             context_kwargs=context_kwargs,
         )

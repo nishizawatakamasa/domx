@@ -42,15 +42,19 @@
 ### domx.batch
 
 - `Batch[T]`
-- `Batch.attach_patchright_page(*, browser_recreate_every: int | None = 1000, context_recreate_every: int | None = 200, browser_kwargs: dict | None = None, context_kwargs: dict | None = None) -> Iterator[Iterator[tuple[T, PatchrightPage]]]`
-- `Batch.attach_camoufox_page(*, browser_recreate_every: int | None = 1000, context_recreate_every: int | None = 200, browser_kwargs: dict | None = None, context_kwargs: dict | None = None) -> Iterator[Iterator[tuple[T, PlaywrightPage]]]`
+- `Batch.attach_patchright_page(*, browser_recreate_every: int | None = None, context_recreate_every: int | None = None, page_recreate_every: int | None = None, browser_kwargs: dict | None = None, context_kwargs: dict | None = None) -> Iterator[Iterator[tuple[T, PatchrightPage]]]`
+- `Batch.attach_camoufox_page(*, browser_recreate_every: int | None = None, context_recreate_every: int | None = None, page_recreate_every: int | None = None, browser_kwargs: dict | None = None, context_kwargs: dict | None = None) -> Iterator[Iterator[tuple[T, PlaywrightPage]]]`
 - `batch(items: list[T]) -> Batch[T]`
 
-### domx.http
+### domx.fetch
 
-- `fetch_response(url: str | None, *, try_cnt: int = 3, wait_range: tuple[float, float] = (1, 3), sleep_after: tuple[float, float] | None = (0.5, 1), timeout: float = 30, impersonate: str = "chrome") -> Response | None`
-- `fetch_html(url: str | None, *, ...) -> str | None`
-- `fetch_bytes(url: str | None, *, ...) -> bytes | None`
+- `fetch(url: str, *, impersonate: str = "chrome", timeout: float = 30, sleep_after: tuple[float, float] | None = (0.5, 1)) -> WrappedResponse`
+- `wrap_response(res: Response | None) -> WrappedResponse`
+- `WrappedResponse` — `Response` のラッパー。通信失敗時は `bool(w)` が `False`
+- `WrappedResponse.raw` — `Response | None`
+- `WrappedResponse.ok` — HTTP 成功（status < 400）
+- `WrappedResponse.url` / `.status_code` / `.text` / `.content` — 失敗時 `None`
+- `WrappedResponse.json()` — 失敗時 `None`
 
 ## 使用例
 
@@ -201,7 +205,7 @@ import pandas as pd
 from selectolax.lexbor import LexborHTMLParser
 
 from domx import wrap_parser
-from domx.http import fetch_response, fetch_bytes
+from domx.fetch import fetch
 from domx.utils import (
     save_log,
     append_csv,
@@ -220,11 +224,12 @@ n = len(bukken_urls)
 for url_index, request_url in bukken_urls.items():
     print(f'url_index {url_index}/{n - 1}')
 
-    if not (res := fetch_response(request_url)):
+    f = fetch(request_url)
+    if not f:
         append_csv(here('csv/failed.csv'), {
             'url_index': url_index,
             'request_url': request_url,
-            'reason': 'fetch_response',
+            'reason': 'fetch',
         })
         continue
 
@@ -232,9 +237,9 @@ for url_index, request_url in bukken_urls.items():
         'domx:url_index': url_index,
         'domx:saved_at': datetime.now(timezone.utc),
         'domx:request_url': request_url,
-        'domx:final_url': res.url,
-    }) + res.text
-    if not write_text(here('html') / f'{hash_name(res.url)}.html', html):
+        'domx:final_url': f.url,
+    }) + f.text
+    if not write_text(here('html') / f'{hash_name(f.url)}.html', html):
         append_csv(here('csv/failed.csv'), {
             'url_index': url_index,
             'request_url': request_url,
@@ -242,16 +247,16 @@ for url_index, request_url in bukken_urls.items():
         })
         continue
 
-    p = wrap_parser(LexborHTMLParser(res.text))
+    p = wrap_parser(LexborHTMLParser(f.text))
     img_li_scan = p.ii('p.text-left').scan.m(r'画像をクリックすると拡大画像がご覧に').n('ul').ii('li').scan
     img_li = img_li_scan.m(r'外観') or img_li_scan.m(r'^(?!.*間取).*')
     img_href = img_li.i('a').attr('href')
-    if img_href and (body := fetch_bytes(urljoin(res.url, img_href))):
-        write_bytes(here(f'media/{url_index}-img-desc.jpg'), body)
+    if img_href and (img := fetch(urljoin(f.url, img_href))).content:
+        write_bytes(here(f'media/{url_index}-img-desc.jpg'), img.content)
 
     main_img_src = p.i('img.w-full.object-contain').attr('src')
-    if main_img_src and (body := fetch_bytes(urljoin(res.url, main_img_src))):
-        write_bytes(here(f'media/{url_index}-img-main.jpg'), body)
+    if main_img_src and (main := fetch(urljoin(f.url, main_img_src))).content:
+        write_bytes(here(f'media/{url_index}-img-main.jpg'), main.content)
 ```
 
 ### extract.py
