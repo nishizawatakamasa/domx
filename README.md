@@ -59,20 +59,32 @@ from domx.utils import save_log, from_here, counter, write_csv
 here = from_here(__file__)
 save_log(here('log/crawling.log'))
 
-prefecture_urls = ['https://home.katitas.jp/buyers_search/area/nagano']
-n = len(prefecture_urls)
-urls = []
-with batch(prefecture_urls).attach_patchright_page(
+SEARCH_URL = 'https://home.katitas.jp/buyers_search'
+
+with batch([SEARCH_URL]).attach_patchright_page(
     browser_recreate_every=300,
     context_recreate_every=100,
     browser_kwargs={'channel': 'chrome', 'headless': False},
     context_kwargs={'viewport': {'width': 1920, 'height': 1080}},
 ) as batch_pages:
-    for i, (prefecture_url, page) in enumerate(batch_pages):
+    for url, page in batch_pages:
+        p = wrap_page(page)
+        p.goto(url)
+        prefecture_urls = p.ii('div ul li a[href^="https://home.katitas.jp/buyers_search/area"]').urls
+
+n = len(prefecture_urls)
+urls = []
+with batch(list(enumerate(prefecture_urls))).attach_patchright_page(
+    browser_recreate_every=300,
+    context_recreate_every=100,
+    browser_kwargs={'channel': 'chrome', 'headless': False},
+    context_kwargs={'viewport': {'width': 1920, 'height': 1080}},
+) as batch_pages:
+    for (i, prefecture_url), page in batch_pages:
         p = wrap_page(page)
         print(f'prefecture_url {i}/{n - 1}')
         for page_num in counter():
-            if not p.goto(f'{prefecture_url}?{urlencode({"page": page_num})}'):
+            if not p.goto(f'{prefecture_url}?{urlencode({"page": page_num})}', sleep_after=(0.5, 1)):
                 break
             if not (bukken_elems := p.ii('ul li div a[href^="https://home.katitas.jp"]:has(p)')):
                 break
@@ -85,6 +97,8 @@ write_csv(here('csv/urls.csv'), [{'url': url} for url in urls])
 from datetime import datetime, timezone
 import time
 
+import pandas as pd
+
 from domx import wrap_page
 from domx.batch import batch
 from domx.utils import (
@@ -96,22 +110,22 @@ from domx.utils import (
     write_text,
     write_bytes,
 )
-import pandas as pd
 
 here = from_here(__file__)
 save_log(here('log/scraping.log'))
 
-bukken_urls = pd.read_csv(here('csv/urls.csv'))['url'].tolist()
-n = len(bukken_urls)
-with batch(bukken_urls).attach_patchright_page(
+items = list(pd.read_csv(here('csv/urls.csv'))['url'].items())
+n = len(items)
+
+with batch(items).attach_patchright_page(
     browser_recreate_every=300,
     context_recreate_every=100,
     browser_kwargs={'channel': 'chrome', 'headless': False},
     context_kwargs={'viewport': {'width': 1920, 'height': 1080}},
 ) as batch_pages:
-    for url_index, (request_url, page) in enumerate(batch_pages):
-        p = wrap_page(page)
+    for (url_index, request_url), page in batch_pages:
         print(f'url_index {url_index}/{n - 1}')
+        p = wrap_page(page)
         if not p.goto(request_url):
             append_csv(here('csv/failed.csv'), {
                 'url_index': url_index,
@@ -148,46 +162,6 @@ with batch(bukken_urls).attach_patchright_page(
         main_img_url = p.i('img.w-full.object-contain').src
         if (body := p.bytes_at(main_img_url)):
             write_bytes(here(f'media/{url_index}-img-main.jpg'), body)
-
-```
-
-### scrape_pairs.py（架空の2段パイプライン例）
-```python
-import pandas as pd
-
-from domx import wrap_page
-from domx.batch import batch
-from domx.utils import from_here
-
-here = from_here(__file__)
-items = pd.read_csv(here('csv/urls.csv'))['url'].tolist()
-
-collected_urls = []
-
-with batch(items).attach_patchright_page(
-    browser_recreate_every=1000,
-    context_recreate_every=200,
-    browser_kwargs={'channel': 'chrome', 'headless': False},
-    context_kwargs={'viewport': {'width': 1920, 'height': 1080}},
-) as batch_pages:
-    for request_url, page in batch_pages:
-        p = wrap_page(page)
-        if not p.goto(request_url):
-            continue
-        # collect urls...
-        collected_urls.extend(p.ii('a[href]').urls)
-
-with batch(collected_urls).attach_camoufox_page(
-    browser_recreate_every=500,
-    context_recreate_every=100,
-    browser_kwargs={'headless': False, 'humanize': True},
-    context_kwargs={'viewport': {'width': 1920, 'height': 1080}},
-) as batch_pages:
-    for request_url, page in batch_pages:
-        p = wrap_page(page)
-        if not p.goto(request_url):
-            continue
-        # scrape...
 ```
 
 ### extract.py
