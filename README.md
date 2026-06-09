@@ -46,16 +46,6 @@
 - `Batch.attach_camoufox_page(*, browser_recreate_every: int | None = None, context_recreate_every: int | None = None, page_recreate_every: int | None = None, browser_kwargs: dict | None = None, context_kwargs: dict | None = None) -> Iterator[Iterator[tuple[T, PlaywrightPage]]]`
 - `batch(items: list[T]) -> Batch[T]`
 
-### domx.fetch
-
-- `fetch(url: str, *, impersonate: str = "chrome", timeout: float = 30, sleep_after: tuple[float, float] | None = (0.5, 1)) -> WrappedResponse`
-- `wrap_response(res: Response | None) -> WrappedResponse`
-- `WrappedResponse` — `Response` のラッパー。通信失敗時は `bool(w)` が `False`
-- `WrappedResponse.raw` — `Response | None`
-- `WrappedResponse.ok` — HTTP 成功（status < 400）
-- `WrappedResponse.url` / `.status_code` / `.text` / `.content` — 失敗時 `None`
-- `WrappedResponse.json()` — 失敗時 `None`
-
 ## 使用例
 
 ### crawl.py
@@ -73,8 +63,10 @@ prefecture_urls = ['https://home.katitas.jp/buyers_search/area/nagano']
 n = len(prefecture_urls)
 urls = []
 with batch(prefecture_urls).attach_patchright_page(
+    browser_recreate_every=300,
+    context_recreate_every=100,
     browser_kwargs={'channel': 'chrome', 'headless': False},
-    context_kwargs={},
+    context_kwargs={'viewport': {'width': 1920, 'height': 1080}},
 ) as batch_pages:
     for i, (prefecture_url, page) in enumerate(batch_pages):
         p = wrap_page(page)
@@ -112,8 +104,10 @@ save_log(here('log/scraping.log'))
 bukken_urls = pd.read_csv(here('csv/urls.csv'))['url'].tolist()
 n = len(bukken_urls)
 with batch(bukken_urls).attach_patchright_page(
+    browser_recreate_every=300,
+    context_recreate_every=100,
     browser_kwargs={'channel': 'chrome', 'headless': False},
-    context_kwargs={},
+    context_kwargs={'viewport': {'width': 1920, 'height': 1080}},
 ) as batch_pages:
     for url_index, (request_url, page) in enumerate(batch_pages):
         p = wrap_page(page)
@@ -194,69 +188,6 @@ with batch(collected_urls).attach_camoufox_page(
         if not p.goto(request_url):
             continue
         # scrape...
-```
-
-### scrape_http.py
-```python
-from datetime import datetime, timezone
-from urllib.parse import urljoin
-
-import pandas as pd
-from selectolax.lexbor import LexborHTMLParser
-
-from domx import wrap_parser
-from domx.fetch import fetch
-from domx.utils import (
-    save_log,
-    append_csv,
-    from_here,
-    meta_html,
-    hash_name,
-    write_text,
-    write_bytes,
-)
-
-here = from_here(__file__)
-save_log(here('log/scraping.log'))
-
-bukken_urls = pd.read_csv(here('csv/urls.csv'))['url']
-n = len(bukken_urls)
-for url_index, request_url in bukken_urls.items():
-    print(f'url_index {url_index}/{n - 1}')
-
-    f = fetch(request_url)
-    if not f:
-        append_csv(here('csv/failed.csv'), {
-            'url_index': url_index,
-            'request_url': request_url,
-            'reason': 'fetch',
-        })
-        continue
-
-    html = meta_html({
-        'domx:url_index': url_index,
-        'domx:saved_at': datetime.now(timezone.utc),
-        'domx:request_url': request_url,
-        'domx:final_url': f.url,
-    }) + f.text
-    if not write_text(here('html') / f'{hash_name(f.url)}.html', html):
-        append_csv(here('csv/failed.csv'), {
-            'url_index': url_index,
-            'request_url': request_url,
-            'reason': 'write_text',
-        })
-        continue
-
-    p = wrap_parser(LexborHTMLParser(f.text))
-    img_li_scan = p.ii('p.text-left').scan.m(r'画像をクリックすると拡大画像がご覧に').n('ul').ii('li').scan
-    img_li = img_li_scan.m(r'外観') or img_li_scan.m(r'^(?!.*間取).*')
-    img_href = img_li.i('a').attr('href')
-    if img_href and (img := fetch(urljoin(f.url, img_href))).content:
-        write_bytes(here(f'media/{url_index}-img-desc.jpg'), img.content)
-
-    main_img_src = p.i('img.w-full.object-contain').attr('src')
-    if main_img_src and (main := fetch(urljoin(f.url, main_img_src))).content:
-        write_bytes(here(f'media/{url_index}-img-main.jpg'), main.content)
 ```
 
 ### extract.py
