@@ -1,6 +1,6 @@
 [project]
 name = "domx"
-version = "0.1.17"
+version = "0.1.18"
 description = "自分用・非汎用"
 readme = "README.md"
 requires-python = ">=3.12"

@@ -5,8 +5,8 @@
 ## インストール
 `uv add domx`  
 
-※ `.patchright()` を使うとき：Google ChromeをPCにインストールしておく。  
-※ `.camoufox()` を使うとき：`uv run camoufox fetch`  
+※ `right()` を使うとき：Google ChromeをPCにインストールしておく。  
+※ `fox()` を使うとき：`uv run camoufox fetch`  
 
 ## 実装機能
 
@@ -39,14 +39,14 @@
 - `glob_paths(dir_path: Path, pattern: str = '*.html') -> list[str]`
 - `counter(start: int = 1) -> Iterator[int]`
 
-### domx.each
+### domx.session
 
-- `Each[T]`
-- `Each.patchright(*, browser: dict | None = None, context: dict | None = None, page: dict | None = None) -> Iterator[tuple[T, PatchrightPage]]`
-- `Each.camoufox(*, browser: dict | None = None, context: dict | None = None, page: dict | None = None) -> Iterator[tuple[T, PlaywrightPage]]`
-- `each(items: list[T]) -> Each[T]`
+- `Session`
+- `Session.page() -> Page`
+- `right(*, browser: dict | None = None, context: dict | None = None, browser_span: int | None = None, context_span: int | None = None, page_span: int | None = None) -> Session`
+- `fox(*, browser: dict | None = None, context: dict | None = None, browser_span: int | None = None, context_span: int | None = None, page_span: int | None = None) -> Session`
 
-`browser` / `context` / `page` には Playwright へ渡すオプションに加え、`span`（そのリソースが担当する item 数。超えたら作り直す）を指定できる。
+`browser` / `context` は Playwright へ渡す起動オプション。`browser_span` / `context_span` / `page_span` はその下に並べる再生成間隔（`page()` 呼び出し回数ベース。省略時は再生成しない）。
 
 ## 使用例
 
@@ -55,36 +55,36 @@
 from urllib.parse import urlencode
 
 from domx import wrap_page
-from domx.each import each
+from domx.session import right
 from domx.utils import save_log, from_here, counter, write_csv
 
 here = from_here(__file__)
 save_log(here('log/crawling.log'))
 
-SEARCH_URL = 'https://home.katitas.jp/buyers_search'
-
-for url, page in each([SEARCH_URL]).patchright(
-    browser={'channel': 'chrome', 'headless': False, 'span': 300},
-    context={'viewport': {'width': 1920, 'height': 1080}, 'span': 100},
-):
+with right(
+    browser={'channel': 'chrome', 'headless': False},
+    context={'viewport': {'width': 1920, 'height': 1080}},
+    browser_span=300,
+    context_span=100,
+    page_span=20,
+) as s:
+    page = s.page()
     p = wrap_page(page)
-    p.goto(url)
+    p.goto('https://home.katitas.jp/buyers_search')
     prefecture_urls = p.ii('div ul li a[href^="https://home.katitas.jp/buyers_search/area"]').urls
 
-n = len(prefecture_urls)
-urls = []
-for (i, prefecture_url), page in each(list(enumerate(prefecture_urls))).patchright(
-    browser={'channel': 'chrome', 'headless': False, 'span': 300},
-    context={'viewport': {'width': 1920, 'height': 1080}, 'span': 100},
-):
-    p = wrap_page(page)
-    print(f'prefecture_url {i}/{n - 1}')
-    for page_num in counter():
-        if not p.goto(f'{prefecture_url}?{urlencode({"page": page_num})}', sleep_after=(0.5, 1)):
-            break
-        if not (bukken_elems := p.ii('ul li div a[href^="https://home.katitas.jp"]:has(p)')):
-            break
-        urls.extend(bukken_elems.urls)
+    n = len(prefecture_urls)
+    urls = []
+    for i, prefecture_url in enumerate(prefecture_urls):
+        print(f'prefecture_url {i}/{n - 1}')
+        for page_num in counter():
+            page = s.page()
+            p = wrap_page(page)
+            if not p.goto(f'{prefecture_url}?{urlencode({"page": page_num})}', sleep_after=(0.5, 1)):
+                break
+            if not (bukken_elems := p.ii('ul li div a[href^="https://home.katitas.jp"]:has(p)')):
+                break
+            urls.extend(bukken_elems.urls)
 write_csv(here('csv/urls.csv'), [{'url': url} for url in urls])
 ```
 
@@ -96,7 +96,7 @@ import time
 import pandas as pd
 
 from domx import wrap_page
-from domx.each import each
+from domx.session import right
 from domx.utils import (
     save_log,
     append_csv,
@@ -113,48 +113,52 @@ save_log(here('log/scraping.log'))
 items = list(pd.read_csv(here('csv/urls.csv'))['url'].items())
 n = len(items)
 
-for (url_index, request_url), page in each(items).patchright(
-    browser={'channel': 'chrome', 'headless': False, 'span': 300},
-    context={'viewport': {'width': 1920, 'height': 1080}, 'span': 100},
-):
-    print(f'url_index {url_index}/{n - 1}')
-    p = wrap_page(page)
-    if not p.goto(request_url):
-        append_csv(here('csv/failed.csv'), {
-            'url_index': url_index,
-            'request_url': request_url,
-            'reason': 'goto',
-        })
-        continue
-    html = meta_html({
-        'domx:url_index': url_index,
-        'domx:saved_at': datetime.now(timezone.utc),
-        'domx:request_url': request_url,
-        'domx:final_url': page.url,
-    }) + page.content()
-    if not write_text(here('html') / f'{hash_name(page.url)}.html', html):
-        append_csv(here('csv/failed.csv'), {
-            'url_index': url_index,
-            'request_url': request_url,
-            'reason': 'write_text',
-        })
+with right(
+    browser={'channel': 'chrome', 'headless': False},
+    context={'viewport': {'width': 1920, 'height': 1080}},
+    browser_span=300,
+    context_span=100,
+) as s:
+    for url_index, request_url in items:
+        print(f'url_index {url_index}/{n - 1}')
+        page = s.page()
+        p = wrap_page(page)
+        if not p.goto(request_url):
+            append_csv(here('csv/failed.csv'), {
+                'url_index': url_index,
+                'request_url': request_url,
+                'reason': 'goto',
+            })
+            continue
+        html = meta_html({
+            'domx:url_index': url_index,
+            'domx:saved_at': datetime.now(timezone.utc),
+            'domx:request_url': request_url,
+            'domx:final_url': page.url,
+        }) + page.content()
+        if not write_text(here('html') / f'{hash_name(page.url)}.html', html):
+            append_csv(here('csv/failed.csv'), {
+                'url_index': url_index,
+                'request_url': request_url,
+                'reason': 'write_text',
+            })
 
-    page.screenshot(path=here(f'media/{url_index}-full-page.png'), full_page=True)
+        page.screenshot(path=here(f'media/{url_index}-full-page.png'), full_page=True)
 
-    elem_iframe = p.i('iframe[src^="https://home.katitas.jp"]')
-    elem_iframe.scroll_into_view()
-    time.sleep(3)
-    elem_iframe.screenshot(here(f'media/{url_index}-gmap.png'), isolate=True)
+        elem_iframe = p.i('iframe[src^="https://home.katitas.jp"]')
+        elem_iframe.scroll_into_view()
+        time.sleep(3)
+        elem_iframe.screenshot(here(f'media/{url_index}-gmap.png'), isolate=True)
 
-    img_li_scan = p.ii('p.text-left').scan.m(r'画像をクリックすると拡大画像がご覧に').n('ul').ii('li').scan
-    img_li = img_li_scan.m(r'外観') or img_li_scan.m(r'^(?!.*間取).*')
-    img_url = img_li.i('a').url
-    if (body := p.bytes_at(img_url)):
-        write_bytes(here(f'media/{url_index}-img-desc.jpg'), body)
+        img_li_scan = p.ii('p.text-left').scan.m(r'画像をクリックすると拡大画像がご覧に').n('ul').ii('li').scan
+        img_li = img_li_scan.m(r'外観') or img_li_scan.m(r'^(?!.*間取).*')
+        img_url = img_li.i('a').url
+        if (body := p.bytes_at(img_url)):
+            write_bytes(here(f'media/{url_index}-img-desc.jpg'), body)
 
-    main_img_url = p.i('img.w-full.object-contain').src
-    if (body := p.bytes_at(main_img_url)):
-        write_bytes(here(f'media/{url_index}-img-main.jpg'), body)
+        main_img_url = p.i('img.w-full.object-contain').src
+        if (body := p.bytes_at(main_img_url)):
+            write_bytes(here(f'media/{url_index}-img-main.jpg'), body)
 ```
 
 ### extract.py
