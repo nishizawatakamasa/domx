@@ -1,5 +1,5 @@
 from contextlib import ExitStack
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from types import TracebackType
 from typing import Any, Self
 
@@ -20,6 +20,12 @@ class Span:
     context: int | None = None
     page: int | None = None
 
+    def __post_init__(self) -> None:
+        for f in fields(self):
+            value = getattr(self, f.name)
+            if value is not None and value < 1:
+                raise ValueError(f'{f.name} は 1 以上で指定してください (got {value})')
+
 
 class _SessionBase:
     def __init__(
@@ -30,7 +36,6 @@ class _SessionBase:
         span: Span | None = None,
     ) -> None:
         self._span = span or Span()
-        self._validate_span(self._span)
         self._browser_kw = dict(browser or {})
         self._context_kw = dict(context or {})
         self._browser = None
@@ -39,36 +44,22 @@ class _SessionBase:
         self._i = 0
         self._active = False
 
-    @staticmethod
-    def _validate_span(span: Span) -> None:
-        for name, value in (
-            ('span.browser', span.browser),
-            ('span.context', span.context),
-            ('span.page', span.page),
-        ):
-            if value is not None and value < 1:
-                raise ValueError(f'{name} は 1 以上で指定してください')
-
     def page(self) -> Page:
         if not self._active:
             raise RuntimeError('セッションが開いていません')
         if self._page is None:
             self._open_browser()
-        elif self._span.browser and self._i > 0 and self._i % self._span.browser == 0:
+        elif (b := self._span.browser) and self._i % b == 0:
             self._close_browser()
             self._open_browser()
-        elif self._span.context and self._i > 0 and self._i % self._span.context == 0:
+        elif (c := self._span.context) and self._i % c == 0:
             self._close_context()
             self._open_context()
-        elif self._span.page and self._i > 0 and self._i % self._span.page == 0:
+        elif (p := self._span.page) and self._i % p == 0:
             self._close_page()
             self._open_page()
         self._i += 1
         return self._page
-
-    def _open_context(self) -> None:
-        self._ctx = self._browser.new_context(**self._context_kw)
-        self._open_page()
 
     def _open_page(self) -> None:
         self._page = self._ctx.new_page()
@@ -77,6 +68,10 @@ class _SessionBase:
         if self._page:
             self._page.close()
             self._page = None
+
+    def _open_context(self) -> None:
+        self._ctx = self._browser.new_context(**self._context_kw)
+        self._open_page()
 
     def _close_context(self) -> None:
         self._close_page()
@@ -136,7 +131,7 @@ class CamoufoxSession(_SessionBase):
         span: Span | None = None,
     ) -> None:
         super().__init__(browser=browser, context=context, span=span)
-        self._fox_stack = ExitStack()
+        self._fox_stack: ExitStack | None = None
 
     def __enter__(self) -> Self:
         self._active = True
@@ -161,6 +156,7 @@ class CamoufoxSession(_SessionBase):
 
     def _close_browser(self) -> None:
         self._close_context()
-        self._fox_stack.close()
-        self._fox_stack = ExitStack()
+        if self._fox_stack:
+            self._fox_stack.close()
+            self._fox_stack = None
         self._browser = None
